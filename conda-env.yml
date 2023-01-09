@@ -1,0 +1,11 @@
+name: bandwidth_reservation
+channels:
+  - conda-forge
+dependencies:
+  - python==3.8
+  - numpy
+  - pandas
+  - tianshou
+  - gym
+  - matplotlib
+  - altair
