@@ -1,17 +1,11 @@
 import pandas as pd
-import os
-import tqdm
-import datetime as dt
-import gym
-from gym import spaces
-import numpy as np
-import random
 
 NO1_path = 'datasets/Dataset_NO1.csv'
 NO2_path = 'datasets/Dataset_NO2.csv'
 NO3_path = 'datasets/Dataset_NO3.csv'
 
-PRICE_RESOLUTION = 1
+PRICE_RESOLUTION = 30
+MAX_PRICE = 0.25
 
 
 def load_and_preproces_datasets():
@@ -44,10 +38,12 @@ def load_and_preproces_datasets():
     no3 = no3.resample(f'{PRICE_RESOLUTION}S').last().ffill()
     no_df = no1.merge(no2, on='Date', how='inner').merge(no3, on='Date', how='inner')
 
+    # price scale to 0-1
+    no_df[['no1', 'no2', 'no3']] /= MAX_PRICE
+
     # price scale to price resolution
     no_df /= 60 / PRICE_RESOLUTION
     no_df = no_df.reset_index()
-    no_df['timestamp'] = pd.to_datetime(no_df.Date).view('int64') // 10 ** 9
 
     return no_df
 
