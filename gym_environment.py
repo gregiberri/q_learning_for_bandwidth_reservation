@@ -18,7 +18,7 @@ CANCELATION_FEE_PER_MINUTE = 0  # per minutes
 CANCELATION_FEE = CANCELATION_FEE_PER_MINUTE / (60 / PRICE_RESOLUTION)
 CONSTRAINT_VIOLATION_COST = 1
 
-PRERESERVE_TIME = 1
+PRERESERVE_TIME = 100
 
 
 class BREnv(gym.Env):
@@ -52,9 +52,9 @@ class BREnv(gym.Env):
         super(BREnv, self).__init__()
         # Define action and observation space
         # Discrete actions
-        self.action_space = spaces.Discrete(7)
+        self.action_space = spaces.Discrete(5)
         # The observation space
-        self.observation_space = spaces.Box(low=0, high=1, shape=(1, 9), dtype=np.float16)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(1, 7), dtype=np.float16)
 
         # Reward range
         self.reward_range = [-1, -0.3]
@@ -111,7 +111,7 @@ class BREnv(gym.Env):
                                for bs_start, timestep_from_start in zip(self.bs_starts, timesteps_from_start)]
 
         # Prereserved prices
-        prereserved_prices = np.min(self.no_df.loc[prereserved_indices][['no1', 'no2', 'no3']], axis=1).to_list()
+        prereserved_prices = np.min(self.no_df.loc[prereserved_indices][['no1', 'no2']], axis=1).to_list()
         self.prereserved_prices = [[price] * bs_length for price, bs_length in zip(prereserved_prices, self.bs_lengths)]
         self.last_price = self.prereserved_prices[0][0]
 
@@ -132,13 +132,11 @@ class BREnv(gym.Env):
 
     def _get_obs(self):
         # get the current available prices
-        self.current_prices = self.bs_prices[self.current_bs].loc[self.current_bs_step][['no1', 'no2', 'no3']].to_list()
-        self.future_prices = self.bs_future_prices[self.current_bs].loc[self.current_bs_step][
-            ['no1', 'no2', 'no3']].to_list()
+        self.current_prices = self.bs_prices[self.current_bs].loc[self.current_bs_step][['no1', 'no2']].to_list()
+        self.future_prices = self.bs_future_prices[self.current_bs].loc[self.current_bs_step][['no1', 'no2']].to_list()
         under_or_over = self.exunov_bookings[self.current_bs]
 
-        return [self.last_price] + self.current_prices + self.future_prices + [under_or_over,
-                                                                               self.timestep_left_from_bs / MAX_BS_LENGTH]
+        return [self.last_price] + self.current_prices + self.future_prices + [under_or_over, self.timestep_left_from_bs / MAX_BS_LENGTH]
 
     def step(self, action):
         cost = self._take_action(action)
@@ -181,11 +179,8 @@ class BREnv(gym.Env):
         elif action == 2:  # update reservation
             self.last_price = self.current_prices[1]
             cost += CANCELATION_FEE
-        elif action == 3:  # update reservation
-            self.last_price = self.current_prices[2]
-            cost += CANCELATION_FEE
 
-        elif action in [4, 5, 6]:  # update reservation to first no
+        elif action in [3, 4]:  # update reservation to first no
             if self.exunov_bookings[
                 self.current_bs] == 0:  # exact booking, but we would like to solve the underbooking scenario
                 cost += CONSTRAINT_VIOLATION_COST
@@ -196,8 +191,6 @@ class BREnv(gym.Env):
                         new_prereserve_price = self.current_prices[0]
                     elif action == 5:
                         new_prereserve_price = self.current_prices[1]
-                    elif action == 6:
-                        new_prereserve_price = self.current_prices[2]
 
                     self.timestep_left_from_bs += self.exunov_times[self.current_bs]
                     self.bs_lengths[self.current_bs] += self.exunov_times[self.current_bs]
@@ -234,8 +227,6 @@ class BREnv(gym.Env):
                         new_prereserve_price = self.future_prices[0]
                     elif action == 5:
                         new_prereserve_price = self.future_prices[1]
-                    elif action == 6:
-                        new_prereserve_price = self.future_prices[2]
 
                     self.timestep_left_from_bs -= self.exunov_times[self.current_bs]
                     self.bs_lengths[self.current_bs] -= self.exunov_times[self.current_bs]
