@@ -36,10 +36,10 @@ if __name__ == '__main__':
     print('Start training.')
     result = ts.trainer.offpolicy_trainer(
         policy, train_collector, test_collector,
-        max_epoch=30, step_per_epoch=1000 * MAX_BS_LENGTH, step_per_collect=100,
+        max_epoch=10, step_per_epoch=1000 * MAX_BS_LENGTH, step_per_collect=100,
         update_per_step=0.1, episode_per_test=1, batch_size=128,
-        train_fn=lambda epoch, env_step: policy.set_eps(0.5),
+        train_fn=lambda epoch, env_step: policy.set_eps(0.2),
         test_fn=lambda epoch, env_step: policy.set_eps(0.0),
         verbose=True, show_progress=True, test_in_train=True
     )
-    print(f'Finished training! Use {result["duration"]}')
+    print(f'Finished training! Use {result["best_result"]}')
