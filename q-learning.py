@@ -18,6 +18,7 @@ if __name__ == '__main__':
     state_shape = env.observation_space.shape or env.observation_space.n
     action_shape = env.action_space.shape or env.action_space.n
     # model
+    V_param = Q_param = {'input_dim': state_shape, 'output_dim': action_shape, 'hidden_sizes': [128, 128]}
     net = Net(state_shape,
               action_shape,
               hidden_sizes=[128, 128, 128, 128],
