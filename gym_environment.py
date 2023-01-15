@@ -95,7 +95,7 @@ class BREnv(gym.Env):
         # Set the episode length
         self.bs_number = random.randint(self.min_bs_number, self.max_bs_number)
         self.bs_starts = np.random.randint(self.max_bs_number * self.max_bs_length + PRERESERVE_TIME,
-                                           len(self.no_df) - self.max_bs_number * self.max_bs_length + PRERESERVE_TIME,
+                                           len(self.no_df) - (self.max_bs_number * self.max_bs_length + PRERESERVE_TIME),
                                            size=self.bs_number)
         self.bs_lengths = np.random.randint(self.min_bs_length, self.max_bs_length, size=self.bs_number)
 
