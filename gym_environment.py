@@ -194,7 +194,7 @@ class BREnv(gym.Env):
             cost += self.solve_underbooking(new_prereserve_price)
 
         # overbooking: the overbooking should be solved until the overbooking time before the end of the current bs
-        elif self.exunov_bookings[self.current_bs] == 1 and self.timestep_left_from_bs == self.exunov_times:
+        elif self.exunov_bookings[self.current_bs] == 1 and self.timestep_left_from_bs == self.exunov_times[self.current_bs]:
             if self.timestep_left_from_bs == 0:
                 # add a large cost
                 cost += CONSTRAINT_VIOLATION_COST
