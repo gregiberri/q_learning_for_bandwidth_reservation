@@ -59,7 +59,14 @@ class GreedyPolicyNet(nn.Module):
                 ) -> Tuple[torch.Tensor, Any]:
         logits = torch.zeros(self.action_dim)
 
-        # change if the current price is lower
-        logits[torch.argmin(obs[0, 0:3])] = 1
+        # if underbooking solve it with the lowest current price
+        if obs[0, -2] == -1:
+            logits[torch.argmin(obs[0, 1:3]) + 3] = 1
+        # if overbooking solve it with the lowest future price
+        elif obs[0, -2] == 1:
+            logits[torch.argmin(obs[0, 3:5]) + 3] = 1
+        else:
+            # change if the current price is lower
+            logits[torch.argmin(obs[0, 0:3])] = 1
 
         return logits, state
