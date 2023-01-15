@@ -6,15 +6,17 @@ import random
 
 from data_preprocess import load_and_preproces_datasets, train_val_split, PRICE_RESOLUTION
 
-MIN_BS_LENGTH = 20
-MAX_BS_LENGTH = 40
+MIN_BS_LENGTH_MINUTE = 10
+MAX_BS_LENGTH_MINUTE = 20
 MIN_BS_NUMBER = 3
 MAX_BS_NUMBER = 10
 MIN_UNOV_BOOK = 0.5
 MAX_UNOV_BOOK = 5
 UNDER_EX_OVER_BOOK_RATES = [0, 1, 0]
+CANCELATION_FEE_PER_MINUTE = 0.1  # per minutes
 
-CANCELATION_FEE_PER_MINUTE = 0  # per minutes
+MIN_BS_LENGTH = int(MIN_BS_LENGTH_MINUTE * (60 / PRICE_RESOLUTION))
+MAX_BS_LENGTH = int(MAX_BS_LENGTH_MINUTE * (60 / PRICE_RESOLUTION))
 CANCELATION_FEE = CANCELATION_FEE_PER_MINUTE / (60 / PRICE_RESOLUTION)
 CONSTRAINT_VIOLATION_COST = 1
 
@@ -173,12 +175,13 @@ class BREnv(gym.Env):
         if action == 0:  # do nothing
             pass
 
+        # update for the
         elif action == 1:  # update reservation
             self.last_price = self.current_prices[0]
-            cost += CANCELATION_FEE
+            cost += CANCELATION_FEE * self.timestep_left_from_bs
         elif action == 2:  # update reservation
             self.last_price = self.current_prices[1]
-            cost += CANCELATION_FEE
+            cost += CANCELATION_FEE * self.timestep_left_from_bs
 
         elif action in [3, 4]:  # update reservation to first no
             if self.exunov_bookings[
