@@ -155,21 +155,26 @@ class BREnv(gym.Env):
         self.timestep_left_from_bs -= 1
 
         # If we arrived to a next bs reset everything to the next bs
+        done = self.handle_bs_end()
+
+        obs = self._get_obs()
+
+        return obs, reward, done, {}
+
+    def handle_bs_end(self):
         if self.timestep_left_from_bs == 0:
-            # If it was the last bs`s last step we terminate the episode, only until the last-1 because we need one bs ahead for future bs price, maybe later new idea
+            # If it was the last bs`s last step we terminate the episode
             if self.current_bs == self.bs_number - 1:
                 self.current_bs_step -= 1
                 # todo big negative reward if under or overbook, but it was not done
-                return self._get_obs(), reward, True, {}
+                return True
 
             self.current_bs += 1
             self.current_bs_step = 0
             self.last_price = self.prereserved_prices[self.current_bs][0]
             self.timestep_left_from_bs = self.bs_lengths[self.current_bs]
 
-        obs = self._get_obs()
-
-        return obs, reward, False, {}
+        return False
 
     def _take_action(self, action):
         if self.random_seed is not None:
