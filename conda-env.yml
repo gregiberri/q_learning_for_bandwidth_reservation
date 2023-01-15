@@ -9,3 +9,5 @@ dependencies:
   - gym
   - matplotlib
   - altair
+  - optuna
+  - jupyter
