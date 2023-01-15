@@ -148,16 +148,19 @@ class BREnv(gym.Env):
 
     def step(self, action):
         cost = self._take_action(action)
-        reward = - cost
 
         # step to next
         self.current_bs_step += 1
         self.timestep_left_from_bs -= 1
 
+        cost += self.no_unov_booking_update_cost()
+
         # If we arrived to a next bs reset everything to the next bs
         done = self.handle_bs_end()
 
         obs = self._get_obs()
+
+        reward = - cost
 
         return obs, reward, done, {}
 
@@ -175,6 +178,34 @@ class BREnv(gym.Env):
             self.timestep_left_from_bs = self.bs_lengths[self.current_bs]
 
         return False
+
+    def no_unov_booking_update_cost(self):
+        cost = 0
+
+        # underbooking: the underbooking should be solved until the end of the current BS
+        if self.exunov_bookings[self.current_bs] == -1 and self.timestep_left_from_bs == 0:
+            # add a large cost
+            cost += CONSTRAINT_VIOLATION_COST
+
+            # get the NO minimum NO price
+            new_prereserve_price = np.min(self.current_prices)
+
+            # solve the underbooking with the price
+            cost += self.solve_underbooking(new_prereserve_price)
+
+        # overbooking: the overbooking should be solved until the overbooking time before the end of the current bs
+        elif self.exunov_bookings[self.current_bs] == 1 and self.timestep_left_from_bs == self.exunov_times:
+            if self.timestep_left_from_bs == 0:
+                # add a large cost
+                cost += CONSTRAINT_VIOLATION_COST
+
+                # get the NO minimum NO price
+                new_prereserve_price = np.min(self.future_prices)
+
+                # solve the underbooking with the price
+                cost += self.solve_overbooking(new_prereserve_price)
+
+        return cost
 
     def _take_action(self, action):
         if self.random_seed is not None:
@@ -202,28 +233,19 @@ class BREnv(gym.Env):
             else:
                 # underbooking: the new price we prereserve on is one of the prices of the current NOs
                 if self.exunov_bookings[self.current_bs] == -1:
-                    # we pay the fee for canceling the underbooked time in the next BS, besides the last BS (there is nothing to cancel)
-                    cost += CANCELATION_FEE * self.exunov_times[self.current_bs] if self.current_bs < self.bs_number else 0
-
                     # select the price from the current NOs
                     new_prereserve_price = self.current_prices[action - self.no_number - 1]
 
                     # make the changes in the variables for solving underbooking
-                    self.solve_underbooking(new_prereserve_price)
+                    cost += self.solve_underbooking(new_prereserve_price)
 
                 # overbooking: the new price we prereserve on is one of the prices of the future NOs
                 elif self.exunov_bookings[self.current_bs] == 1:
-                    # we pay the fee for canceling the overbooked time in the current BS
-                    cost += CANCELATION_FEE * self.exunov_times[self.current_bs]
-
                     # select the price from the next NOs
                     new_prereserve_price = self.future_prices[action - self.no_number - 1]
 
                     # make the changes in the variables for solving overbooking
-                    self.solve_overbooking(new_prereserve_price)
-
-                # the under- or overbooking is solved, so there is exact booking for the current BS now
-                self.exunov_bookings[self.current_bs] = 0
+                    cost += self.solve_overbooking(new_prereserve_price)
 
         return cost
 
