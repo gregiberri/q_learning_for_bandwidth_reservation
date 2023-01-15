@@ -3,19 +3,19 @@ import pandas as pd
 
 NO1_path = 'datasets/Dataset_NO1.csv'
 
-PRICE_RESOLUTION = 1
-MAX_PRICE = 0.096
-MIN_PRICE = 0.089
+PRICE_RESOLUTION = 30
 
 
 def load_and_preproces_datasets():
     no1_df = pd.read_csv(NO1_path)
 
+    no1_df = no1_df[no1_df[' Price '] < 1]
+
     no1 = no1_df[no1_df[' Region'] == 'us-west-1b'].drop(' Region', axis=1)
     no2 = no1_df[no1_df[' Region'] == 'us-west-1c'].drop(' Region', axis=1)
 
-    no1 = no1[no1[' Instance Type'] == 'c3.2xlarge'].drop(' Instance Type', axis=1)
-    no2 = no2[no2[' Instance Type'] == 'c3.2xlarge'].drop(' Instance Type', axis=1)
+    no1 = no1.drop(' Instance Type', axis=1)
+    no2 = no2.drop(' Instance Type', axis=1)
 
     no1.Date = pd.to_datetime(no1.Date)
     no2.Date = pd.to_datetime(no2.Date)
@@ -35,8 +35,8 @@ def load_and_preproces_datasets():
     no_df = no_df.reset_index()
 
     # price scale to 0-1
-    min_price_at_resolution = MIN_PRICE / (60 / PRICE_RESOLUTION)
-    max_price_at_resolution = MAX_PRICE / (60 / PRICE_RESOLUTION)
+    min_price_at_resolution = np.min(no_df[['no1', 'no2']].to_numpy())
+    max_price_at_resolution = np.max(no_df[['no1', 'no2']].to_numpy())
     no_df[['no1', 'no2']] = (no_df[['no1', 'no2']] - min_price_at_resolution) / (max_price_at_resolution - min_price_at_resolution)
 
     return no_df
