@@ -250,70 +250,102 @@ class BREnv(gym.Env):
         return cost
 
     def solve_underbooking(self, new_prereserve_price):
+        # we pay the fee for canceling the underbooked time in the next BS, besides the last BS (there is nothing to cancel)
+        cost = CANCELATION_FEE * self.exunov_times[self.current_bs] if self.current_bs < self.bs_number else 0
+
         # we add the underbooked amount to the time left from the current BS
         self.timestep_left_from_bs += self.exunov_times[self.current_bs]
 
-        # we add the underbooked amount to the length of the current BS, and subtract it from the next BS
-        self.bs_lengths[self.current_bs] += self.exunov_times[self.current_bs]
-        self.bs_lengths[self.current_bs + 1] -= self.exunov_times[self.current_bs]
-
         # set the prices to the underbooking
+        # we add the underbooked amount to the length of the current BS
+        self.bs_lengths[self.current_bs] += self.exunov_times[self.current_bs]
+
         # the prices of the underbooked timeperiod is appended to the current BS's prices
         self.bs_prices[self.current_bs] = self.no_df.loc[self.bs_prices[self.current_bs]['index'].iloc[0]:
                                                          self.bs_prices[self.current_bs]['index'].iloc[-1] +
                                                          self.exunov_times[self.current_bs]].reset_index()
-        # the prices of the underbooked timeperiod is taken from to the next BS's prices
-        self.bs_prices[self.current_bs + 1] = self.no_df.loc[self.bs_prices[self.current_bs + 1]['index'].iloc[0] +
-                                                             self.exunov_times[self.current_bs]:
-                                                             self.bs_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
-
         # the prices of the underbooked timeperiod is appended to the future prices in the current BS
         self.bs_future_prices[self.current_bs] = self.no_df.loc[self.bs_future_prices[self.current_bs]['index'].iloc[0]:
                                                                 self.bs_future_prices[self.current_bs]['index'].iloc[-1] +
                                                                 self.exunov_times[self.current_bs]].reset_index()
-        # the prices of the underbooked timeperiod is taken from the future prices in the next BS
-        self.bs_future_prices[self.current_bs + 1] = self.no_df.loc[self.bs_future_prices[self.current_bs + 1]['index'].iloc[0] +
-                                                                    self.exunov_times[self.current_bs]:
-                                                                    self.bs_future_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
 
         # Update the prereserved prices
         # append the currently available price for the underbooked time to the current BS's prereserved prices
         self.prereserved_prices[self.current_bs] = self.prereserved_prices[self.current_bs] + [new_prereserve_price] * self.exunov_times[self.current_bs]
-        # take the prereserved prices for the underbooked time from the next BS
-        self.prereserved_prices[self.current_bs + 1] = self.prereserved_prices[self.current_bs + 1][self.exunov_times[self.current_bs]:]
+
+        # for all BS besides the last one
+        if self.current_bs >= self.bs_number:
+            # we subtract the underbooked amount to the length from the next BS
+            self.bs_lengths[self.current_bs + 1] -= self.exunov_times[self.current_bs]
+
+            # set the prices to the underbooking
+            # the prices of the underbooked timeperiod is taken from to the next BS's prices
+            self.bs_prices[self.current_bs + 1] = self.no_df.loc[self.bs_prices[self.current_bs + 1]['index'].iloc[0] +
+                                                                 self.exunov_times[self.current_bs]:
+                                                                 self.bs_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
+
+            # the prices of the underbooked timeperiod is taken from the future prices in the next BS
+            self.bs_future_prices[self.current_bs + 1] = self.no_df.loc[self.bs_future_prices[self.current_bs + 1]['index'].iloc[0] +
+                                                                        self.exunov_times[self.current_bs]:
+                                                                        self.bs_future_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
+
+            # Update the prereserved prices
+            # take the prereserved prices for the underbooked time from the next BS
+            self.prereserved_prices[self.current_bs + 1] = self.prereserved_prices[self.current_bs + 1][self.exunov_times[self.current_bs]:]
+
+        # the under- or overbooking is solved, so there is exact booking for the current BS now
+        self.exunov_bookings[self.current_bs] = 0
+
+        return cost
 
     def solve_overbooking(self, new_prereserve_price):
+        # we pay the fee for canceling the overbooked time in the current BS
+        cost = CANCELATION_FEE * self.exunov_times[self.current_bs]
+
         # we subtract the overbooked amount from the time left from the current BS
         self.timestep_left_from_bs -= self.exunov_times[self.current_bs]
 
-        # we subtract the overbooked amount form the length of the current BS, and add it to the next BS
+        # we subtract the overbooked amount form the length of the current BS
         self.bs_lengths[self.current_bs] -= self.exunov_times[self.current_bs]
-        self.bs_lengths[self.current_bs + 1] += self.exunov_times[self.current_bs]
 
         # set the prices to the overbooking
         # the prices of the overbooked timeperiod is taken from the current BS's prices
         self.bs_prices[self.current_bs] = self.no_df.loc[self.bs_prices[self.current_bs]['index'].iloc[0]:
                                                          self.bs_prices[self.current_bs]['index'].iloc[-1] -
                                                          self.exunov_times[self.current_bs]].reset_index()
-        # the prices of the overbooked timeperiod appended to the next BS's prices
-        self.bs_prices[self.current_bs + 1] = self.no_df.loc[self.bs_prices[self.current_bs + 1]['index'].iloc[0] -
-                                                             self.exunov_times[self.current_bs]:
-                                                             self.bs_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
-
         # the prices of the overbooked timeperiod is taken from the future prices in the current BS
         self.bs_future_prices[self.current_bs] = self.no_df.loc[self.bs_future_prices[self.current_bs]['index'].iloc[0]:
                                                                 self.bs_future_prices[self.current_bs]['index'].iloc[-1] -
                                                                 self.exunov_times[self.current_bs]].reset_index()
-        # the prices of the overbooked timeperiod is added to the future prices in the next BS
-        self.bs_future_prices[self.current_bs + 1] = self.no_df.loc[self.bs_future_prices[self.current_bs + 1]['index'].iloc[0] -
-                                                                    self.exunov_times[self.current_bs]:
-                                                                    self.bs_future_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
 
         # Update the prereserved prices
         # take the prereserved prices for the overbooked time from the current BS
         self.prereserved_prices[self.current_bs] = self.prereserved_prices[self.current_bs][:-self.exunov_times[self.current_bs]]
-        # append the currently available price for the overbooked time to the next BS's prereserved prices
-        self.prereserved_prices[self.current_bs + 1] = [new_prereserve_price] * self.exunov_times[self.current_bs] + self.prereserved_prices[self.current_bs + 1]
+
+        # for all BS besides the last one
+        if self.current_bs >= self.bs_number:
+            # we add the overbooked amount to the next BS length
+            self.bs_lengths[self.current_bs + 1] += self.exunov_times[self.current_bs]
+
+            # set the prices to the overbooking
+            # the prices of the overbooked timeperiod appended to the next BS's prices
+            self.bs_prices[self.current_bs + 1] = self.no_df.loc[self.bs_prices[self.current_bs + 1]['index'].iloc[0] -
+                                                                 self.exunov_times[self.current_bs]:
+                                                                 self.bs_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
+
+            # the prices of the overbooked timeperiod is added to the future prices in the next BS
+            self.bs_future_prices[self.current_bs + 1] = self.no_df.loc[self.bs_future_prices[self.current_bs + 1]['index'].iloc[0] -
+                                                                        self.exunov_times[self.current_bs]:
+                                                                        self.bs_future_prices[self.current_bs + 1]['index'].iloc[-1]].reset_index()
+
+            # Update the prereserved prices
+            # append the currently available price for the overbooked time to the next BS's prereserved prices
+            self.prereserved_prices[self.current_bs + 1] = [new_prereserve_price] * self.exunov_times[self.current_bs] + self.prereserved_prices[self.current_bs + 1]
+
+        # the under- or overbooking is solved, so there is exact booking for the current BS now
+        self.exunov_bookings[self.current_bs] = 0
+
+        return cost
 
 
 if __name__ == '__main__':
