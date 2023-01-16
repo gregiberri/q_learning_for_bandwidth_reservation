@@ -4,6 +4,7 @@ import gym
 import numpy as np
 import pandas as pd
 import torch
+from tianshou.data import Batch
 from tianshou.env import DummyVectorEnv
 import tianshou as ts
 from tqdm import tqdm
@@ -29,22 +30,19 @@ def select_network(state_shape: np.array, action_shape: np.array, network: str =
         return Net(state_shape,
                    action_shape,
                    hidden_sizes=[128, 128, 128, 128],
-                   device=device,
-                   )
+                   device=device)
     elif network == 'dueling_fc':
         V_param = Q_param = {'input_dim': state_shape, 'output_dim': action_shape, 'hidden_sizes': [128, 128]}
         return Net(state_shape,
                    action_shape,
                    hidden_sizes=[128, 128, 128, 128],
                    device=device,
-                   dueling_param=(Q_param, V_param),
-                   )
+                   dueling_param=(Q_param, V_param))
     elif network == 'rnn':
         return Recurrent(layer_num=3,
                          state_shape=state_shape,
                          action_shape=action_shape,
-                         device=device
-                         )
+                         device=device)
     elif network == 'no_policy':
         return NoPolicyNet(state_shape=state_shape,
                            action_shape=action_shape)
@@ -73,7 +71,7 @@ def evaluate_network(net, env: gym.Env, episode_number: int = 10):
         env.random_seed = episode
         obs = env.reset()
         while not done:
-            act = torch.argmax(net(torch.tensor(obs).view(1, -1))[0])
+            act = torch.argmax(net(Batch(obs=torch.tensor(obs).view(1, -1), info={})).logits[0])
             obs_next, rew, done, info = env.step(act)
 
             # record the event
@@ -155,7 +153,7 @@ def train(network='fc',
         update_per_step=0.1, episode_per_test=1, batch_size=batch_size,
         train_fn=lambda epoch, env_step: policy.set_eps(0.5),
         test_fn=lambda epoch, env_step: policy.set_eps(0.0),
-        save_best_fn=lambda policy: torch.save(net.state_dict(), save_path),
+        save_best_fn=lambda policy: torch.save(policy.state_dict(), save_path),
         verbose=True, show_progress=True, test_in_train=True
     )
     print(f'Finished training! Use {result["best_result"]}')
@@ -180,15 +178,21 @@ def test_baselines(env, result_folder: str = 'results'):
     greedy_policy_df.to_csv(os.path.join(result_folder, 'greedy_policy.csv'), index=False)
 
 
-def test_network(env, network_type, network_path: str = 'results/dqn.pth', result_path: str = 'results/dqn_policy.csv'):
+def test_network(env, network_type, network_path: str = 'results/dqn.pth', result_path: str = 'results/dqn_policy.csv', is_double=False):
     state_shape = env.observation_space.shape or env.observation_space.n
     action_shape = env.action_space.shape or env.action_space.n
 
     # model
     print(f'Evaluate {network_path} policy')
     net = select_network(state_shape, action_shape, network=network_type)
-    net.load_state_dict(torch.load(network_path))
-    policy_df = evaluate_network(net, env)
+    policy = ts.policy.DQNPolicy(net, None,
+                                 discount_factor=0.99,
+                                 estimation_step=3,
+                                 target_update_freq=300,
+                                 is_double=is_double)
+    policy.load_state_dict(torch.load(network_path))
+    policy.eval()
+    policy_df = evaluate_network(policy, env)
     print(f'Trained net {network_path} reward: {policy_df.groupby("episode").sum().reward.mean()}\n')
 
     policy_df.to_csv(result_path, index=False)
