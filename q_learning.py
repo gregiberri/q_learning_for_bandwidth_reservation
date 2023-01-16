@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 from tianshou.env import DummyVectorEnv
 import tianshou as ts
+from tqdm import tqdm
 
 from classical_policies import NoPolicyNet, GreedyPolicyNet
 from data_preprocess import load_and_preproces_datasets, train_val_split
@@ -54,7 +55,7 @@ def select_network(state_shape: np.array, action_shape: np.array, network: str =
         raise ValueError(f'Wrong value for network: {network}')
 
 
-def evaluate_network(net, env: gym.Env):
+def evaluate_network(net, env: gym.Env, episode_number: int = 10):
     """
     Evaluate the network
 
@@ -62,28 +63,32 @@ def evaluate_network(net, env: gym.Env):
     :param env:
     :return:
     """
+    episodes = []
     rewards = []
     observations = []
     actions = []
 
-    done = False
-    obs = env.reset()
-    while not done:
-        act = torch.argmax(net(torch.tensor(obs).view(1, -1))[0])
-        obs_next, rew, done, info = env.step(act)
+    for episode in tqdm(range(episode_number)):
+        done = False
+        env.random_seed = episode
+        obs = env.reset()
+        while not done:
+            act = torch.argmax(net(torch.tensor(obs).view(1, -1))[0])
+            obs_next, rew, done, info = env.step(act)
 
-        # record the event
-        actions.append(int(act))
-        rewards.append(rew)
-        observations.append(obs)
+            # record the event
+            episodes.append(episode)
+            actions.append(int(act))
+            rewards.append(rew)
+            observations.append(obs)
 
-        obs = obs_next
+            obs = obs_next
 
     # make a dict of the observations
     observations = np.array(observations).T.tolist()
     obs_dict = dict(zip(['current_price', 'no1_price', 'no2_price', 'no1_future_price', 'no2_future_price', 'bookingtype', 'timesteps_left'],
                         observations))
-    obs_dict.update({'actions': actions, 'rewards': rewards})
+    obs_dict.update({'action': actions, 'reward': rewards, 'episode': episodes})
     # make a pandas dataframe of the state, reward, observations
     df = pd.DataFrame(obs_dict)
 
@@ -96,11 +101,11 @@ def load_dfs():
     return no_df_train.reset_index(drop=True), no_df_val.reset_index(drop=True)
 
 
-def make_envs():
+def make_envs(**kwargs):
     no_df_train, no_df_val = load_dfs()
 
-    train_env = DummyVectorEnv([lambda: BREnv(no_df_train) for _ in range(10)])
-    test_env = DummyVectorEnv([lambda: BREnv(no_df_val, random_seed=1) for i in range(1)])
+    train_env = DummyVectorEnv([lambda: BREnv(no_df_train, **kwargs) for _ in range(10)])
+    test_env = DummyVectorEnv([lambda: BREnv(no_df_val, random_seed=1, **kwargs) for i in range(1)])
 
     return train_env, test_env
 
@@ -119,9 +124,10 @@ def train(network='fc',
           estimation_step=3,
           batch_size=128,
           is_double=True,
-          save_path='results/dqn.pth'):
+          save_path='results/dqn.pth',
+          **kwargs):
     # make the envs
-    train_env, test_env = make_envs()
+    train_env, test_env = make_envs(**kwargs)
 
     # get the state and action shapes
     state_shape, action_shape = get_env_state_and_action_spaces(train_env)
@@ -160,15 +166,17 @@ def test_baselines(env, result_folder: str = 'results'):
     action_shape = env.action_space.shape or env.action_space.n
 
     # make and evaluate no_policy
+    print('Evaluate no policy')
     net = select_network(state_shape, action_shape, network='no_policy')
     no_policy_df = evaluate_network(net, env)
-    print(f'No net reward: {no_policy_df.rewards.sum()}')
+    print(f'No net reward: {no_policy_df.groupby("episode").sum().reward.mean()}\n')
     no_policy_df.to_csv(os.path.join(result_folder, 'no_policy.csv'), index=False)
 
     # make and evaluate greedy net
+    print('Evaluate greedy policy')
     net = select_network(state_shape, action_shape, network='greedy')
     greedy_policy_df = evaluate_network(net, env)
-    print(f'Greedy net reward: {greedy_policy_df.rewards.sum()}')
+    print(f'Greedy net reward: {greedy_policy_df.groupby("episode").sum().reward.mean()}\n')
     greedy_policy_df.to_csv(os.path.join(result_folder, 'greedy_policy.csv'), index=False)
 
 
@@ -177,9 +185,10 @@ def test_network(env, network_type, network_path: str = 'results/dqn.pth', resul
     action_shape = env.action_space.shape or env.action_space.n
 
     # model
+    print(f'Evaluate {network_path} policy')
     net = select_network(state_shape, action_shape, network=network_type)
     net.load_state_dict(torch.load(network_path))
     policy_df = evaluate_network(net, env)
-    print(f'Trained net reward: {policy_df.rewards.sum()}')
+    print(f'Trained net {network_path} reward: {policy_df.groupby("episode").sum().reward.mean()}\n')
 
     policy_df.to_csv(result_path, index=False)
