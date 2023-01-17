@@ -103,9 +103,9 @@ def make_envs(**kwargs):
     no_df_train, no_df_val = load_dfs()
 
     train_env = DummyVectorEnv([lambda: BREnv(no_df_train, **kwargs) for _ in range(10)])
-    test_env = DummyVectorEnv([lambda: BREnv(no_df_val, random_seed=1, **kwargs) for i in range(1)])
+    test_env = DummyVectorEnv([lambda: BREnv(no_df_val, random_seed=i, **kwargs) for i in range(10)])
 
-    return train_env, test_env
+    return train_env, test_env, no_df_train, no_df_val
 
 
 def get_env_state_and_action_spaces(train_env):
@@ -125,7 +125,7 @@ def train(network='fc',
           save_path='results/dqn.pth',
           **kwargs):
     # make the envs
-    train_env, test_env = make_envs(**kwargs)
+    train_env, test_env, _, no_df_val = make_envs(**kwargs)
 
     # get the state and action shapes
     state_shape, action_shape = get_env_state_and_action_spaces(train_env)
@@ -145,6 +145,17 @@ def train(network='fc',
     train_collector = ts.data.Collector(policy, train_env, ts.data.VectorReplayBuffer(20000, len(train_env)), exploration_noise=True)
     test_collector = ts.data.Collector(policy, test_env, ts.data.VectorReplayBuffer(20000, len(test_env)))
 
+    def save_and_test(best_policy):
+        # Saving
+        torch.save(best_policy.state_dict(), save_path)
+
+        # Testing and extracting result
+        best_policy = best_policy.eval()
+        best_test_env = BREnv(no_df_val, random_seed=1, **kwargs, min_bs_number=10, max_bs_number=10)
+        policy_df = evaluate_network(best_policy, best_test_env)
+        print(f'Trained net {save_path} reward: {policy_df.groupby("episode").sum().reward.mean()}\n')
+        policy_df.to_csv(save_path.replace('.pth', '_policy.csv'), index=False)
+
     # train
     print('Start training.')
     result = ts.trainer.offpolicy_trainer(
@@ -153,7 +164,7 @@ def train(network='fc',
         update_per_step=0.1, episode_per_test=1, batch_size=batch_size,
         train_fn=lambda epoch, env_step: policy.set_eps(0.5),
         test_fn=lambda epoch, env_step: policy.set_eps(0.0),
-        save_best_fn=lambda policy: torch.save(policy.state_dict(), save_path),
+        save_best_fn=save_and_test,
         verbose=True, show_progress=True, test_in_train=True
     )
     print(f'Finished training! Use {result["best_result"]}')
@@ -191,7 +202,7 @@ def test_network(env, network_type, network_path: str = 'results/dqn.pth', resul
                                  target_update_freq=300,
                                  is_double=is_double)
     policy.load_state_dict(torch.load(network_path))
-    policy.eval()
+    policy = policy.eval()
     policy_df = evaluate_network(policy, env)
     print(f'Trained net {network_path} reward: {policy_df.groupby("episode").sum().reward.mean()}\n')
 
