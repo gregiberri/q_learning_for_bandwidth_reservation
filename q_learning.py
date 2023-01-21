@@ -124,6 +124,7 @@ def train(network='fc',
           batch_size=128,
           is_double=True,
           save_path='results/dqn.pth',
+          to_validate=True,
           **kwargs):
     # make the envs
     train_env, test_env, _, no_df_val = make_envs(**kwargs)
@@ -150,12 +151,13 @@ def train(network='fc',
         # Saving
         torch.save(best_policy.state_dict(), save_path)
 
-        # Testing and extracting result
-        best_policy = best_policy.eval()
-        best_test_env = BREnv(no_df_val, random_seed=1, **kwargs, min_bs_number=10, max_bs_number=10)
-        policy_df = evaluate_network(best_policy, best_test_env)
-        print(f'Trained net {save_path} reward: {policy_df.groupby("episode").sum().reward.mean()}\n')
-        policy_df.to_csv(save_path.replace('.pth', '_policy.csv'), index=False)
+        if to_validate:
+            # Testing and extracting result
+            best_policy = best_policy.eval()
+            best_test_env = BREnv(no_df_val, random_seed=1, **kwargs, min_bs_number=10, max_bs_number=10)
+            policy_df = evaluate_network(best_policy, best_test_env)
+            print(f'Trained net {save_path} reward: {policy_df.groupby("episode").sum().reward.mean()}\n')
+            policy_df.to_csv(save_path.replace('.pth', '_policy.csv'), index=False)
 
     # train
     print('Start training.')
