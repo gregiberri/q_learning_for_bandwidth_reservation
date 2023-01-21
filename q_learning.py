@@ -7,6 +7,7 @@ import torch
 from tianshou.data import Batch
 from tianshou.env import DummyVectorEnv
 import tianshou as ts
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from classical_policies import NoPolicyNet, GreedyPolicyNet
@@ -147,6 +148,9 @@ def train(network='fc',
     train_collector = ts.data.Collector(policy, train_env, ts.data.VectorReplayBuffer(20000, len(train_env)), exploration_noise=True)
     test_collector = ts.data.Collector(policy, test_env, ts.data.VectorReplayBuffer(20000, len(test_env)))
 
+    # tensorboard logger
+    logger = ts.utils.TensorboardLogger(SummaryWriter(save_path.replace('.pth', '')))
+
     def save_and_test(best_policy):
         # Saving
         torch.save(best_policy.state_dict(), save_path)
@@ -163,11 +167,12 @@ def train(network='fc',
     print('Start training.')
     result = ts.trainer.offpolicy_trainer(
         policy, train_collector, test_collector,
-        max_epoch=20, step_per_epoch=1000 * MAX_BS_LENGTH, step_per_collect=100,
+        max_epoch=200, step_per_epoch=10 * MAX_BS_LENGTH, step_per_collect=10,
         update_per_step=0.1, episode_per_test=1, batch_size=batch_size,
         train_fn=lambda epoch, env_step: policy.set_eps(0.5),
         test_fn=lambda epoch, env_step: policy.set_eps(0.0),
         save_best_fn=save_and_test,
+        logger=logger,
         verbose=True, show_progress=True, test_in_train=True
     )
     print(f'Finished training! Use {result["best_result"]}')
