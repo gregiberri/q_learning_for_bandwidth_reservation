@@ -70,6 +70,7 @@ def evaluate_network(net, env: gym.Env, episode_number: int = 10):
         done = False
         env.random_seed = episode
         obs = env.reset()
+        env.random_seed += 1
         while not done:
             act = torch.argmax(net(Batch(obs=torch.tensor(obs).view(1, -1), info={})).logits[0])
             obs_next, rew, done, info = env.step(act)
